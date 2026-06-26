@@ -1,0 +1,13 @@
+GET http://localhost:3000/pokedex/
+
+###
+
+POST http://localhost:3000/pokedex/capturer/rattata
+
+###
+PATCH http://localhost:3000/pokedex/3
+Content-Type: application/json
+
+{
+    "rarete":"LEGENDAIRE"
+}

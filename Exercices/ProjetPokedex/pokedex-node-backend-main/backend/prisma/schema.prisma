@@ -1,0 +1,78 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TypePokemon{
+  NORMAL
+  FEU 
+  EAU 
+  PLANTE 
+  ELECTRIK 
+  GLACE
+  COMBAT 
+  POISON 
+  SOL 
+  VOL 
+  PSY 
+  INSECTE
+  ROCHE 
+  SPECTRE 
+  DRAGON 
+  TENEBRES 
+  ACIER 
+  FEE
+}
+
+enum Rarete{
+  COMMUN 
+  RARE 
+  LEGENDAIRE
+}
+
+model Dresseur{
+  id          Int     @id @default(autoincrement())
+  pseudo      String  @unique
+  ville       String?
+  badge       Int     @default(0)
+  createdAt   DateTime  @default(now())
+  pokemons    Pokemon[]
+}
+
+model Pokemon{
+  id              Int     @id @default(autoincrement())
+  numeroPokedex   Int   @unique 
+  nom             String 
+  typePrincipal   TypePokemon
+  typeSecondaire  TypePokemon? 
+  pointsVie       Int 
+  taille          Float
+  poids           Float 
+  imageUrl        String?
+  rarete          Rarete  @default(COMMUN)
+  captureLe       DateTime @default(now())
+  dresseurId      Int?
+  dresseur        Dresseur?   @relation(fields:[dresseurId], references: [id])
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id          String     @id @default(uuid())
+  email       String @unique 
+  password    String  
+  role        Role  @default(USER)
+  createdAt   DateTime  @default(now())
+}

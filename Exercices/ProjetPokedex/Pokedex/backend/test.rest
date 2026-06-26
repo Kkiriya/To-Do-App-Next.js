@@ -1,0 +1,11 @@
+GET http://localhost:3000/pokedex/api
+
+###
+
+POST http://localhost:3000/pokedex/capturer/pikachu
+Content-Type: application/json
+
+###
+
+POST http://localhost:3000/pokedex/capturer/meowscarada
+Content-Type: application/json
