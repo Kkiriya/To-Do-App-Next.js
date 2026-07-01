@@ -99,3 +99,255 @@ Initialize prisma
 ```bash
 npx prisma init
 ```
+
+## 5. Prisma Schema (models, enums, relations)
+
+Replace all of `prisma/schema.prisma` with the projects models
+
+```prisma
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- ENUMS ----------
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Statut {
+  A_VENIR
+  SUCCES
+  ECHEC
+  REPORTE
+}
+
+// ---------- MODELES ----------
+model User {
+  id           Int           @id @default(autoincrement())
+  email        String        @unique
+  pseudo       String
+  password     String // HASH bcrypt
+  role         Role          @default(USER)
+  createdAt    DateTime      @default(now())
+  suivis       Suivi[]
+  commentaires Commentaire[]
+}
+
+model Lancement {
+  id            Int           @id @default(autoincrement())
+  ref           String        @unique // id externe -> anti-doublon
+  nom           String
+  agence        String?
+  fusee         String?
+  mission       String?
+  lieu          String?
+  imageUrl      String?
+  dateLancement DateTime?
+  statut        Statut        @default(A_VENIR)
+  createdAt     DateTime      @default(now())
+  suivis        Suivi[]
+  commentaires  Commentaire[]
+}
+
+// Liste de suivi : un User <-> un Lancement (N-N enrichie)
+model Suivi {
+  id          Int       @id @default(autoincrement())
+  rappel      Boolean   @default(false)
+  userId      Int
+  lancementId Int
+  user        User      @relation(fields: [userId], references: [id])
+  lancement   Lancement @relation(fields: [lancementId], references: [id])
+
+  @@unique([userId, lancementId])
+}
+
+model Commentaire {
+  id          Int       @id @default(autoincrement())
+  contenu     String
+  createdAt   DateTime  @default(now())
+  userId      Int
+  lancementId Int
+  user        User      @relation(fields: [userId], references: [id])
+  lancement   Lancement @relation(fields: [lancementId], references: [id])
+}
+```
+
+_Every model will change based on the projects needs however the Role enum is almost always neccessary! (especially if using auth)_
+
+_`Lancement.ref` is @unique: its the Id for the external API it prevents importing the same one twice on the same launch_
+
+## 6. Migration + Prisma client (singleton)
+
+```bash
+npx prisma migrate dev --name init
+npx prisma generate
+```
+
+Create singleton in `src/utils/prisma.ts`
+
+```ts
+import { PrismaNeon } from "@prisma/adapter-neon";
+import { PrismaClient } from "../../generated/prisma/client.js"; // here add .js to remove compiling errors
+import dotenv from "dotenv";
+dotenv.config();
+
+const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL });
+
+const prisma = new PrismaClient({
+  adapter,
+  log: ["query", "info", "warn", "error"],
+});
+
+export default prisma;
+```
+
+_The import comes from `../../generated/prisma/client` no from `@prisma/client`_
+
+_in `package.json` change `"type": "commonjs"` to `"type": "module"` to get rid of errors_
+
+## 7. Minimal Express server
+
+Create `src/server.ts`
+
+```ts
+import express, { type Request, type Response } from "express"; // here we add type to avoid compiler errors
+import dotenv from "dotenv";
+dotenv.config();
+
+const app = express();
+app.use(express.json());
+
+app.get("/", (req: Request, res: Response) => {
+res.json({ message: "LaunchPad - Mission Control" });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(‘Serveur sur http://localhost:${PORT}‘));
+```
+
+Add to `.env`
+
+```.env
+PORT=3000
+```
+
+Run
+
+```bash
+npm run dev
+```
+
+_Terminal should show `Serveur sur http://localhost:3000`_
+
+## 8. Security - middlewares JWT
+
+Create `src/middlewares/auth.ts`
+
+```ts
+import { Request, Response, NextFunction } from "express";
+import jwt from "jsonwebtoken";
+
+export type JwtPayload = { sub: number; role: "USER" | "ADMIN" };
+
+// Verifie le token et attache l’utilisateur a req.user
+export function authentifier(req: Request, res: Response, next: NextFunction) {
+  const header = req.headers.authorization; // "Bearer xxx.yyy.zzz"
+  if (!header?.startsWith("Bearer ")) {
+    return res.status(401).json({ erreur: "Token manquant" });
+  }
+  const token = header.split(" ")[1];
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+    (req as any).user = payload;
+    next();
+  } catch {
+    res.status(401).json({ erreur: "Token invalide ou expire" });
+  }
+}
+
+// Exige un role (a brancher APRES authentifier)
+export function exigerRole(role: "ADMIN" | "USER") {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if ((req as any).user?.role !== role) {
+      return res.status(403).json({ erreur: "Acces refuse" });
+    }
+    next();
+  };
+}
+```
+
+_401 vs 403: 401 => "Je ne sais pas qui tu es"; 403 => "je sais, mais tu n'as pas le droit"_
+
+## 9. Authentification (register / login / me)
+
+create `src/routes/auth.routes/ts`
+
+```ts
+import { Router, type Request, type Response } from "express";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import prisma from "../utils/prisma.js";
+import { authentifier } from "../middlewares/auth.js";
+
+const router = Router();
+
+// POST /auth/register
+router.post("/register", async (req: Request, res: Response) => {
+  const { email, pseudo, password } = req.body;
+  if (!email || !pseudo || !password) {
+    return res.status(400).json({ erreur: "email, pseudo et password requis" });
+  }
+  try {
+    const hash = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: { email, pseudo, password: hash },
+    });
+    res
+      .status(201)
+      .json({ id: user.id, email: user.email, pseudo: user.pseudo });
+  } catch {
+    res.status(400).json({ erreur: "Email deja utilise" });
+  }
+});
+
+// POST /auth/login
+router.post("/login", async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) return res.status(401).json({ erreur: "Identifiants invalides" });
+  const ok = await bcrypt.compare(password, user.password);
+  if (!ok) return res.status(401).json({ erreur: "Identifiants invalide" });
+  const token = jwt.sign(
+    { sub: user.id, role: user.role },
+    process.env.JWT_SECRET!,
+    { expiresIn: "2h" },
+  );
+  res.json({ token });
+});
+
+// Get /auth/me (route protege)
+router.get("/me", authentifier, async (req: Request, res: Response) => {
+  const id = (req as any).user.sub;
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      email: true,
+      pseudo: true,
+      role: true,
+      createdAt: true,
+    },
+  });
+  res.json(user);
+});
+
+export default router;
+```
+
+_We use select to never return the password, same reason the error message stays generic_

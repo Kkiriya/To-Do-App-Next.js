@@ -1,0 +1,76 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// --- ENUMS ---
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Statut {
+  A_VENIR
+  SUCCES
+  ECHEC
+  REPORTE
+}
+
+// --- MODELES ---
+model User {
+  id           Int           @id @default(autoincrement())
+  email        String        @unique
+  pseudo       String
+  password     String // HASH bcrypt
+  role         Role          @default(USER)
+  createdAt    DateTime      @default(now())
+  suivis       Suivi[]
+  commentaires Commentaire[]
+}
+
+model Lancement {
+  id            Int           @id @default(autoincrement())
+  ref           String        @unique // id externe -> anti-doublon
+  nom           String
+  agence        String? // ? -> not required
+  fusee         String?
+  mission       String?
+  lieu          String?
+  imageUrl      String?
+  dateLancement DateTime?
+  statut        Statut        @default(A_VENIR)
+  ceatedAt      DateTime      @default(now()) // always include this one
+  suivis        Suivi[]
+  commentaires  Commentaire[]
+}
+
+// Liste de suivi: un User <-> un Lancement (N-N enrichie)
+model Suivi {
+  id         Int       @id @default(autoincrement())
+  rappel     Boolean   @default(false)
+  userId     Int
+  lacementId Int
+  user       User      @relation(fields: [userId], references: [id])
+  lancement  Lancement @relation(fields: [lacementId], references: [id])
+
+  @@unique([userId, lacementId]) // prevents duplicates entries
+}
+
+model Commentaire {
+  id          Int       @id @default(autoincrement())
+  contenu     String
+  createdAt   DateTime  @default(now())
+  userId      Int
+  lancementId Int
+  user        User      @relation(fields: [userId], references: [id])
+  lancement   Lancement @relation(fields: [lancementId], references: [id])
+}
