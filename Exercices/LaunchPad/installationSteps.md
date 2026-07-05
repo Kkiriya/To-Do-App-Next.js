@@ -447,3 +447,67 @@ export default router;
 ```
 
 _pagination -> (skip/take + count), RBAC (admin)_
+
+## 11. Import live via Axios (The Space Devs)
+
+Instance Axios in `src/api/spaceDevs.ts`
+
+```ts
+import axios from "axios";
+import dotenv from "dotenv";
+dotenv.config();
+
+export const spaceDevs = axios.create({
+  baseURL: process.env.SPACE_API || "http://ldev.tesspacedevs.com/2.2.0",
+  timeout: 100000,
+});
+```
+
+Add import route inside of `lancements.routes.ts` before default router
+
+```ts
+import axios from "axios";
+import { spaceDevs } from "../api/spaceDevs.js";
+
+// POST /lancement/importer body: { "limite": 5 }
+// -> recupere les prochains lancement REELS et les enregistre (sans doublons)
+router.post("/importer", authentifier, async (req: Request, res: Response) => {
+  const limite = Math.min(10, Number(req.body.limite) || 5);
+  try {
+    // 1) Appel API publique via Axios
+    const { data } = await spaceDevs.get("/launch/upcoming/", {
+      params: { limit: limite },
+    });
+
+    // 2) Transformation + 3) ecriture (upsert: creer su nouveau, sinon mettre a jour)
+    let importes = 0;
+    for (const l of data.results) {
+      await prisma.lancement.upsert({
+        where: { ref: l.id },
+        update: { statut: "A_VENIR" },
+        create: {
+          ref: l.id,
+          nom: l.name,
+          agence: l.launch_service_provider?.name ?? null,
+          fusee: l.rocket?.configuration?.name ?? null,
+          mission: l.mission?.name ?? null,
+          imageUrl: l.image ?? null,
+          dateLancement: l.net ? new Date(l.net) : null,
+          statut: "A_VENIR",
+        },
+      });
+      importes++;
+    }
+    res
+      .status(201)
+      .json({ message: `${importes} lancement(s) importe(s)`, importes });
+  } catch (e) {
+    if (axios.isAxiosError(e)) {
+      return res
+        .status(502)
+        .json({ erreur: "API The Space Devs injoignable (ou quota atteint)" });
+    }
+    res.status(500).json({ erreur: "Errreur lors de l'import" });
+  }
+});
+```

@@ -2,8 +2,52 @@ import { Router, type Request, type Response } from "express";
 import prisma from "../utils/prisma.js";
 import { authentifier, exigerRole } from "../middlewares/auth.js";
 import { stat } from "node:fs";
+import axios from "axios";
+import { spaceDevs } from "../api/spaceDevs.js";
 
 const router = Router();
+
+// POST /lancement/importer body: { "limite": 5 }
+// -> recupere les prochains lancement REELS et les enregistre (sans doublons)
+router.post("/importer", authentifier, async (req: Request, res: Response) => {
+  const limite = Math.min(10, Number(req.body.limite) || 5);
+  try {
+    // 1) Appel API publique via Axios
+    const { data } = await spaceDevs.get("/launch/upcoming/", {
+      params: { limit: limite },
+    });
+
+    // 2) Transformation + 3) ecriture (upsert: creer su nouveau, sinon mettre a jour)
+    let importes = 0;
+    for (const l of data.results) {
+      await prisma.lancement.upsert({
+        where: { ref: l.id },
+        update: { statut: "A_VENIR" },
+        create: {
+          ref: l.id,
+          nom: l.name,
+          agence: l.launch_service_provider?.name ?? null,
+          fusee: l.rocket?.configuration?.name ?? null,
+          mission: l.mission?.name ?? null,
+          imageUrl: l.image ?? null,
+          dateLancement: l.net ? new Date(l.net) : null,
+          statut: "A_VENIR",
+        },
+      });
+      importes++;
+    }
+    res
+      .status(201)
+      .json({ message: `${importes} lancement(s) importe(s)`, importes });
+  } catch (e) {
+    if (axios.isAxiosError(e)) {
+      return res
+        .status(502)
+        .json({ erreur: "API The Space Devs injoignable (ou quota atteint)" });
+    }
+    res.status(500).json({ erreur: "Errreur lors de l'import" });
+  }
+});
 
 // GET /lancements?statut=A_VENIR&page=1&limit=10 (public, filtre + pagine)
 router.get("/", async (req: Request, res: Response) => {
