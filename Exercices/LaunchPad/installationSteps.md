@@ -511,10 +511,137 @@ router.post("/importer", authentifier, async (req: Request, res: Response) => {
   }
 });
 ```
+
 ## 12. Ma liste de suivi (propriete)
 
 create `src/routes/suivis.routes.ts`
 
 ```ts
+import { Router, type Request, type Response } from "express";
+import prisma from "../utils/prisma.js";
+import { authentifier } from "../middlewares/auth.js";
 
+const router = Router();
+router.use(authentifier); // TOUT ce router exige d'etre connecte
+
+// GET /mes-suivis -> les lancements suivis par l'utilisateur connecte
+router.get("/", async (req: Request, res: Response) => {
+  const userId = (req as any).user.sub;
+  const suivis = await prisma.suivi.findMany({
+    where: { userId },
+    include: { lancement: true },
+    orderBy: { id: "desc" },
+  });
+  res.json(suivis);
+});
+
+// POST /mes-suivis body: {"lancementId": 1, "rappel": true }
+router.post("/", async (req: Request, res: Response) => {
+  const userId = (req as any).user.sub;
+  const { lancementId, rappel } = req.body;
+  try {
+    const suivi = await prisma.suivi.create({
+      data: { userId, lancementId: Number(lancementId), rappel: !!rappel },
+    });
+    res.status(201).json(suivi);
+  } catch {
+    res.status(400).json({ erreur: "Lancement deha suivi (ou inexistant)" });
+  }
+});
+
+// PATCH /mes-suivis/:id -> activer/desactiver le rappel (propriete verifiee)
+router.patch("/:id", async (req: Request, res: Response) => {
+  const userId = (req as any).user.sub;
+  const id = Number(req.params.id);
+  const suivi = await prisma.suivi.findUnique({ where: { id } });
+  if (!suivi) return res.status(404).json({ erreur: "Suivi introuvable" });
+  if (suivi.userId !== userId) {
+    return res.status(403).json({ erreur: "Ce n'est pas votre suivi" });
+  }
+  const maj = await prisma.suivi.update({
+    where: { id },
+    data: { rappel: !!req.body.rappel },
+  });
+  res.json(maj);
+});
+
+// DELETE /mes-suivis/:id (propriete verifiee)
+router.delete("/:id", async (req: Request, res: Response) => {
+  const userId = (req as any).user.sub;
+  const id = Number(req.params.id);
+  const suivi = await prisma.suivi.findUnique({ where: { id } });
+  if (!suivi) return res.status(404).json({ erreur: "Suivi introuvable" });
+  if (suivi.userId !== userId) {
+    return res.status(403).json({ erreur: "Ce n'est pas votre suivi" });
+  }
+  await prisma.suivi.delete({ where: { id } });
+  res.status(204).end();
+});
+
+export default router;
+```
+
+## 13. Les commentaires (mission log)
+
+create `src/routes/commentaires.routes.ts`
+
+```ts
+import { Router, type Request, type Response } from "express";
+import prisma from "../utils/prisma.js";
+import { authentifier } from "../middlewares/auth.js";
+
+const router = Router();
+
+// GET /lancements/:id/commentaires (public)
+router.get(
+  "/lancements/:id/commentaires",
+  async (req: Request, res: Response) => {
+    const lancementId = Number(req.params.id);
+    const commentaires = await prisma.commentaire.findMany({
+      where: { lancementId },
+      include: { user: { select: { pseudo: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    res.json(commentaires);
+  },
+);
+
+// POST /lancements/:id/commentaires body: { "contenue": "..." } (connecte)
+router.post(
+  "lancement/:id/commentaires",
+  authentifier,
+  async (req: Request, res: Response) => {
+    const userId = (req as any).user.sub;
+    const lancementId = Number(req.params.id);
+    const { contenu } = req.body;
+    if (!contenu) return res.status(400).json({ erreur: "contenue requis" });
+    const commentaire = await prisma.commentaire.create({
+      data: { contenu, userId, lancementId },
+    });
+    res.status(201).json(commentaire);
+  },
+);
+
+// DELETE /commentaires/:id -> l'auteur OU un ADMIN peut supprimer
+router.delete(
+  "/commentaires/:id",
+  authentifier,
+  async (req: Request, res: Response) => {
+    const user = (req as any).user; // { sub, role }
+    const id = Number(req.params.id);
+    const commentaire = await prisma.commentaire.findUnique({ where: { id } });
+    if (!commentaire)
+      return res.status(404).json({ erreur: "commentaire introuvable" });
+
+    const estAuteur = commentaire.userId === user.sub;
+    const estAdmin = user.role === "ADMIN";
+    if (!estAuteur && !estAdmin) {
+      return res.status(403).json({ erreur: "Action non autorisee" });
+    }
+    await prisma.commentaire.delete({ where: { id } });
+    res.status(204).end();
+  },
+);
+
+export default router;
 ```
