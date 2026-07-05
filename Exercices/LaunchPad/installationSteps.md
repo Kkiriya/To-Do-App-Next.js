@@ -645,3 +645,11 @@ router.delete(
 
 export default router;
 ```
+
+## 14. Brancher tous les routers
+
+upadte `src/server.ts`
+
+```ts
+
+```
