@@ -20,7 +20,7 @@ router.get(
 
 // POST /lancements/:id/commentaires body: { "contenue": "..." } (connecte)
 router.post(
-  "lancement/:id/commentaires",
+  "/lancements/:id/commentaires",
   authentifier,
   async (req: Request, res: Response) => {
     const userId = (req as any).user.sub;

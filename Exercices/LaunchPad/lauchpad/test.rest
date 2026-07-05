@@ -1,0 +1,59 @@
+@base = http://localhost:3000
+
+### 1. Incsription
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{ "email": "neil@cmaisonneuve.qc.ca", "pseudo": "Neil", "password": "apollo11" }
+
+### 2. Connexion -> copier le token renvoye
+# @name login
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "email": "neil@cmaisonneuve.qc.ca", "password": "apollo11" }
+
+### 3. Qui suis-je? (route protegee)
+GET {{base}}/auth/me
+Authorization: Bearer {{login.response.body.token}}
+
+### 4. Importer les vrais prochains lancements (Axios)
+POST {{base}}/lancements/importer
+Authorization: Bearer {{login.response.body.token}}
+Content-Type: application/json
+
+{ "limite": 5 }
+
+### 5. Lister les lancements (public, filtre + pagine)
+GET {{base}}/lancements?statut=A_VENIR&page=1&limit=10
+
+### 6. Suivre le lancements 1 (avec rappel)
+POST {{base}}/mes-suivis
+Authorization: Bearer {{login.response.body.token}}
+Content-Type: application/json
+
+{ "lancementId": 1, "rappel": true }
+
+### 7. Voir ma liste de suivi
+GET {{base}}/mes-suivis
+Authorization: Bearer {{login.response.body.token}}
+
+### 8. Commenter le lancement 1
+POST {{base}}/lancements/1/commentaires
+Authorization: Bearer {{login.response.body.token}}
+Content-Type: application/json
+
+{ "contenu": "Decollage imminent, j'ai hate!" }
+
+### 9. Voir les commentaires (public)
+GET {{base}}/lancements/1/commentaires
+
+### 10. importer SANS token -> doit echouer (401)
+POST {{base}}/lancements/importer
+Content-Type: application/json
+
+{ "limite": 3 }
+
+### 11. Supprimmer le lancement 1 en tant que USER -> doit echouer (403)
+DELETE {{base}}/lancements/1
+Authorization: Bearer {{login.response.body.token}}

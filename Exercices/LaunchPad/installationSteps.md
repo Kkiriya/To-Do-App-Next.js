@@ -651,5 +651,108 @@ export default router;
 upadte `src/server.ts`
 
 ```ts
+import express, {
+  type Request,
+  type Response,
+  type NextFunction,
+} from "express";
+import dotenv from "dotenv";
+import authRoutes from "./routes/auth.routes.js";
+import lancementsRoutes from "./routes/lancements.routes.js";
+import suivisRoutes from "./routes/suivis.routes.js";
+import commentairesRoutes from "./routes/commentaires.routes.js";
 
+dotenv.config();
+
+const app = express();
+app.use(express.json());
+
+app.get("/", (req: Request, res: Response) => {
+  res.json({ message: "LaunchPad - Mission Control" });
+});
+
+app.use("/auth", authRoutes);
+app.use("/lancements", lancementsRoutes);
+app.use("/mes-suivis", suivisRoutes);
+app.use("/", commentairesRoutes); // lancements/:id/commentaires et /commentaires/:id
+
+// 404
+app.use((req: Request, res: Response) =>
+  res.status(404).json({ erreur: "Route inconnue" }),
+);
+
+// gestionnaire d'erreurs global (4 parametres)
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  console.error(err);
+  res.status(500).json({ erreur: "Erreur interne du serveur" });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Serveur sur http://localhost:${PORT}`));
+```
+
+## 15. Tester le flux complet
+
+create `test.rest` at the projects root (extension REST client)
+
+```.rest
+@base = http://localhost:3000
+
+### 1. Incsription
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{ "email": "neil@cmaisonneuve.qc.ca", "pseudo": "Neil", "password": "apollo11" }
+
+### 2. Connexion -> copier le token renvoye
+# @name login
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "email": "neil@cmaisonneuve.qc.ca", "password": "apollo11" }
+
+### 3. Qui suis-je? (route protegee)
+GET {{base}}/auth/me
+Authorization: Bearer {{login.response.body.token}}
+
+### 4. Importer les vrais prochains lancements (Axios)
+POST {{base}}/lancements/importer
+Authorization: Bearer {{login.response.body.token}}
+Content-Type: application/json
+
+{ "limite": 5 }
+
+### 5. Lister les lancements (public, filtre + pagine)
+GET {{base}}/lancements?statut=A_VENIR&page=1&limit=10
+
+### 6. Suivre le lancements 1 (avec rappel)
+POST {{base}}/mes-suivis
+Authorization: Bearer {{login.response.body.token}}
+Content-Type: application/json
+
+{ "lancementId": 1, "rappel": true }
+
+### 7. Voir ma liste de suivi
+GET {{base}}/mes-suivis
+Authorization: Bearer {{login.response.body.token}}
+
+### 8. Commenter le lancement 1
+POST {{base}}/lancements/1/commentaires
+Authorization: Bearer {{login.response.body.token}}
+Content-Type: application/json
+
+{ "contenu": "Decollage imminent, j'ai hate!" }
+
+### 9. Voir les commentaires (public)
+GET {{base}}/lancements/1/commentaires
+
+### 10. importer SANS token -> doit echouer (401)
+POST {{base}}/lancements/importer
+Content-Type: application/json
+
+{ "limite": 3 }
+
+### 11. Supprimmer le lancement 1 en tant que USER -> doit echouer (403)
+DELETE {{base}}/lancements/1
+Authorization: Bearer {{login.response.body.token}}
 ```
