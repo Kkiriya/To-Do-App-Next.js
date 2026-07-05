@@ -511,3 +511,10 @@ router.post("/importer", authentifier, async (req: Request, res: Response) => {
   }
 });
 ```
+## 12. Ma liste de suivi (propriete)
+
+create `src/routes/suivis.routes.ts`
+
+```ts
+
+```

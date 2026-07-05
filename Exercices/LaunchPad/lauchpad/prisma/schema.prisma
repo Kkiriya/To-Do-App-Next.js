@@ -55,14 +55,14 @@ model Lancement {
 
 // Liste de suivi: un User <-> un Lancement (N-N enrichie)
 model Suivi {
-  id         Int       @id @default(autoincrement())
-  rappel     Boolean   @default(false)
-  userId     Int
-  lacementId Int
-  user       User      @relation(fields: [userId], references: [id])
-  lancement  Lancement @relation(fields: [lacementId], references: [id])
+  id          Int       @id @default(autoincrement())
+  rappel      Boolean   @default(false)
+  userId      Int
+  lancementId Int       @map("lancementId")
+  user        User      @relation(fields: [userId], references: [id])
+  lancement   Lancement @relation(fields: [lancementId], references: [id])
 
-  @@unique([userId, lacementId]) // prevents duplicates entries
+  @@unique([userId, lancementId]) // prevents duplicates entries
 }
 
 model Commentaire {
