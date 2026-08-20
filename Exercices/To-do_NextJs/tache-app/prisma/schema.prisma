@@ -24,5 +24,8 @@ model Tache {
   desc      String?
   status    Status   @default(A_FAIRE)
   priorite  Int      @default(1)
+  userId    String?
   createdAt DateTime @default(now())
+
+  @@index([userId])
 }
