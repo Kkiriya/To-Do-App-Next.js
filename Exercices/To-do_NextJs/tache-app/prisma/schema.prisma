@@ -28,4 +28,22 @@ model Tache {
   createdAt DateTime @default(now())
 
   @@index([userId])
+
+  piece Piece[]
+}
+
+model Piece {
+  id       Int    @id @default(autoincrement())
+  cle      String @unique // taches/12/id-photo.jpg
+  url      String
+  nom      String
+  typeMime String
+  taille Int // octet
+
+  createdAt DateTime @default(now())
+
+  tacheId Int
+  tache   Tache @relation(fields: [tacheId], references: [id], onDelete: Cascade)
+
+  @@index([tacheId])
 }

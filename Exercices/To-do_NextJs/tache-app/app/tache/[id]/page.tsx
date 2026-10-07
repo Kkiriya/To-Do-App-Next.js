@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { modifierTache } from "@/app/action";
 import { notFound } from "next/navigation";
+import { ajouterPiece, supprimerPiece } from "@/app/action";
 
 export default async function Page({
   params,
@@ -10,6 +11,7 @@ export default async function Page({
   const { id } = await params;
   const tache = await prisma.tache.findUnique({
     where: { id: Number(id) },
+    include: {pieces}
   });
 
   if (!tache) notFound();
